@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment Successful</title>
+<style>
+  body { font-family: sans-serif; text-align: center; padding-top: 70px; background:#eef2ff; color:#1e293b; }
+  .ring { width:46px; height:46px; margin:0 auto 20px; border:4px solid #e0e7ff; border-top:4px solid #6366f1; border-radius:50%; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  a { color:#6366f1; font-weight:700; }
+</style>
+</head>
+<body>
+  <div class="ring"></div>
+  <h2>✅ পেমেন্ট সম্পন্ন হয়েছে</h2>
+  <p>বটে ফিরিয়ে নেওয়া হচ্ছে...</p>
+  <p id="fallback" style="display:none;">অটো রিডাইরেক্ট না হলে <a id="manual-link" href="#">এখানে ক্লিক করুন</a></p>
+
+  <script>
+    // The gateway appends its own query params to this URL, e.g.
+    // ?transactionId=XXXX&paymentMethod=bkash&status=success
+    const BOT_USERNAME = "vpnshop02_bot";
+    const params = new URLSearchParams(window.location.search);
+    const txId = params.get("transactionId") || params.get("transaction_id") || "";
+    const target = `https://t.me/${BOT_USERNAME}?start=verify_${encodeURIComponent(txId)}`;
+
+    document.getElementById("manual-link").href = target;
+
+    setTimeout(function () {
+      window.location.href = target;
+      document.getElementById("fallback").style.display = "block";
+    }, 800);
+  </script>
+</body>
+</html>
