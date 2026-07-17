@@ -22,7 +22,6 @@
         .card { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); border-radius: 24px; padding: 16px; border: 1px solid rgba(255,255,255,0.8); position: relative; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.03); }
         .btn-p { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); color: #fff; width: 100%; padding: 16px; border-radius: 20px; font-weight: 800; font-size: 14px; box-shadow: 0 10px 20px -5px rgba(30,27,75,0.3); }
         .btn-auto { background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: #fff; width: 100%; padding: 16px; border-radius: 20px; font-weight: 800; font-size: 14px; box-shadow: 0 10px 20px -5px rgba(5,150,105,0.3); }
-        .btn-manual { background: #f1f5f9; color: #1e293b; width: 100%; padding: 14px; border-radius: 18px; font-weight: 700; font-size: 12px; }
         .btn-reject { background: #fee2e2; color: #ef4444; width: 100%; padding: 12px; border-radius: 18px; font-weight: 700; font-size: 12px; }
 
         .acc-box { background: #f8fafc; border: 1.5px dashed #e2e8f0; border-radius: 14px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
@@ -126,10 +125,6 @@
                     <b class="text-[10px] uppercase">General Settings</b>
                     <input type="text" id="set-support-url" placeholder="Support Telegram Link" class="adm-mini-input">
                     <button onclick="saveSupport()" class="btn-p py-2 text-xs">Save Link</button>
-                    <hr>
-                    <div class="flex gap-2"><input type="text" id="pay-name" placeholder="Bkash" class="w-1/2 adm-mini-input"><input type="text" id="pay-num-in" placeholder="Number" class="w-1/2 adm-mini-input"></div>
-                    <button onclick="addPay()" class="btn-p py-2 text-xs">Add Manual Method</button>
-                    <div id="pay-list" class="space-y-2 mt-2"></div>
                 </div>
                 <div class="card space-y-3">
                     <input type="text" id="v-name" placeholder="VPN Brand Name" class="adm-mini-input">
@@ -141,67 +136,59 @@
     </div>
 
     <div id="plan-modal" class="modal"><div class="sheet" id="plan-content"></div></div>
-
-    <!-- NEW: choice between Auto (gateway) pay and Manual pay -->
-    <div id="choice-modal" class="modal">
-        <div class="sheet text-center">
-            <h3 class="font-black text-xl mb-2">Choose Payment</h3>
-            <p id="choice-summary" class="text-xs text-slate-400 mb-6"></p>
-            <button onclick="payAuto()" class="btn-auto mb-3">⚡ Auto Pay (Instant Delivery)</button>
-            <button onclick="openManualPay()" class="btn-manual">🏦 Pay Manually (Bkash/Nagad)</button>
-        </div>
-    </div>
-
     <div id="stock-select-modal" class="modal"><div class="sheet" id="stock-select-content"></div></div>
-    <div id="pay-modal" class="modal">
-        <div class="sheet text-center">
-            <h3 class="font-black text-xl mb-6">Manual Payment</h3>
-            <div id="user-pay-options" class="grid grid-cols-2 gap-3 mb-6"></div>
-            <div id="pay-details" class="hidden">
-                <div class="bg-indigo-50 p-6 rounded-3xl mb-4" onclick="copyText(document.getElementById('active-num').innerText)">
-                    <b id="active-num" class="text-2xl text-indigo-700"></b>
-                </div>
-                <b id="target-price" class="text-xl block mb-6 text-indigo-600"></b>
-                <input type="text" id="trx-id" placeholder="Transaction ID" class="w-full p-4 border-2 rounded-2xl text-center uppercase mb-4 outline-none">
-                <button onclick="orderNow()" class="btn-p">Confirm Order</button>
-            </div>
-        </div>
-    </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, onValue, push, remove, update, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-
-        const firebaseConfig = {
-apiKey: "AIzaSyBAYZOCYDMh0o7O6qiph4SRgFwVmasX7R4",
-  authDomain: "vpn-shop-amit.firebaseapp.com",
-  databaseURL: "https://vpn-shop-amit-default-rtdb.firebaseio.com",
-  projectId: "vpn-shop-amit",
-  storageBucket: "vpn-shop-amit.firebasestorage.app",
-  messagingSenderId: "1023148877135",
-  appId: "1:1023148877135:web:362ca92fbee62c9a1a113a",
-  measurementId: "G-87G7976M80"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
+    <script>
+        // ---------------------------------------------------------------
+        // This page no longer talks to Firebase directly. Every read/write
+        // goes through this server's /api/... routes, authenticated with
+        // Telegram's own signed `tg.initData` string (sent on every call
+        // below). The server re-verifies that signature and derives the
+        // real user id from it - a value typed/edited in this file's JS
+        // console can never grant access, change a price, or mark an
+        // order Approved. See app.py's docstring for the full picture.
+        // ---------------------------------------------------------------
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        // ---- CHANGE THIS to your bot's username ----
         const BOT_USERNAME = "vpnshop02_bot";
+        const INIT_DATA = tg.initData || "";
 
-        const UID = tg.initDataUnsafe?.user?.id || "0000";
-        const UNAME = tg.initDataUnsafe?.user?.first_name || "Guest";
-        const USERNAME = tg.initDataUnsafe?.user?.username || null;
-        const ADMINS = ["8505710811", "7940769450"];
+        // initDataUnsafe is ONLY used for instant UI (name/photo) while the
+        // network call is in flight - never trusted for access or money.
+        const UID_DISPLAY = tg.initDataUnsafe?.user?.id || "----";
+        const UNAME_DISPLAY = tg.initDataUnsafe?.user?.first_name || "Guest";
+        const ADMINS_DISPLAY_ONLY = ["8505710811", "7940769450"]; // UI hint only - server enforces the real check
+
+        async function api(path, opts = {}) {
+            const headers = Object.assign(
+                { "Content-Type": "application/json", "X-Telegram-Init-Data": INIT_DATA },
+                opts.headers || {}
+            );
+            const res = await fetch(path, Object.assign({}, opts, { headers }));
+            if (!res.ok) {
+                let msg = "request_failed";
+                try { msg = (await res.json()).error || msg; } catch (e) {}
+                throw new Error(msg);
+            }
+            return res.status === 204 ? null : res.json();
+        }
+
+        let catalogCache = null;
+        let adminDataCache = null;
+        let adminPollTimer = null;
 
         window.onload = () => {
-            document.getElementById('u-nickname').innerText = UNAME;
-            document.getElementById('display-uid').innerText = "ID: " + UID;
-            document.getElementById('u-pic').src = tg.initDataUnsafe?.user?.photo_url || `https://ui-avatars.com/api/?name=${UNAME}&background=6366f1&color=fff`;
-            if(ADMINS.includes(UID.toString())) document.getElementById('admin-btn-nav').classList.remove('hidden');
-            sync();
+            document.getElementById('u-nickname').innerText = UNAME_DISPLAY;
+            document.getElementById('display-uid').innerText = "ID: " + UID_DISPLAY;
+            document.getElementById('u-pic').src = tg.initDataUnsafe?.user?.photo_url || `https://ui-avatars.com/api/?name=${UNAME_DISPLAY}&background=6366f1&color=fff`;
+            if (ADMINS_DISPLAY_ONLY.includes(UID_DISPLAY.toString())) document.getElementById('admin-btn-nav').classList.remove('hidden');
+
+            loadCatalog();
+            loadMyOrders();
+            setInterval(loadCatalog, 6000);
+            setInterval(loadMyOrders, 6000);
+
             setTimeout(() => {
                 document.getElementById('loading-screen').style.opacity = '0';
                 setTimeout(() => document.getElementById('loading-screen').style.display = 'none', 500);
@@ -213,93 +200,63 @@ apiKey: "AIzaSyBAYZOCYDMh0o7O6qiph4SRgFwVmasX7R4",
             return `https://www.google.com/s2/favicons?sz=128&domain=${domain}`;
         }
 
-        function sync() {
-            onValue(ref(db, 'supportUrl'), (s) => document.getElementById('support-link').href = s.val() || "#");
+        // ================= STORE (public catalog) =================
+        async function loadCatalog() {
+            try {
+                const data = await api('/api/catalog');
+                catalogCache = data;
+                renderCatalog(data);
+            } catch (e) { console.error('catalog load failed', e); }
+        }
 
-            onValue(ref(db, 'vpns'), (s) => {
-                const uBox = document.getElementById('vpn-list'), aBox = document.getElementById('adm-vpn-list'),
-                      sSelect = document.getElementById('stock-vpn-id'), sInv = document.getElementById('stock-inventory-list');
-                uBox.innerHTML = ''; aBox.innerHTML = ''; sSelect.innerHTML = ''; sInv.innerHTML = '';
-                const d = s.val(); if(d) Object.keys(d).forEach(id => {
-                    const v = d[id], count = v.stock ? Object.keys(v.stock).length : 0, isOff = v.status === "OFF";
-                    const logo = getVpnLogo(v.name);
+        function renderCatalog(data) {
+            document.getElementById('support-link').href = data.supportUrl || '#';
 
-                   uBox.innerHTML += `<div onclick="${!isOff ? `openPlans('${id}')` : ''}" class="card flex justify-between items-center bg-white ${isOff ? 'disabled-card' : ''}">
-                   <div class="flex items-center gap-4"><img src="${logo}" class="vpn-img"><b>${v.name}</b></div>
-                   <span class="text-[9px] font-black px-3 py-1.5 rounded-lg ${!isOff ? 'bg-emerald-50 text-emerald-500' : 'bg-rose-50 text-rose-500'}">
-                   ${isOff ? 'OFFLINE' : 'ONLINE'}
-                   </span></div>`;
-
-                    aBox.innerHTML += `<div class="card space-y-4">
-                        <div class="flex justify-between items-center"><div class="flex items-center gap-2"><img src="${logo}" class="w-8 h-8 rounded-lg"><b>${v.name}</b></div>
-                        <div class="flex items-center gap-3"><label class="switch"><input type="checkbox" ${!isOff?'checked':''} onchange="toggleV('${id}', this.checked)"><span class="slider"></span></label><i onclick="delV('${id}')" class="fa-solid fa-trash text-rose-300"></i></div></div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <input type="text" id="p1n-${id}" value="${v.p1n||''}" placeholder="Plan 1" class="adm-mini-input"><input type="number" id="p1p-${id}" value="${v.p1p||''}" placeholder="Price" class="adm-mini-input">
-                            <input type="text" id="p2n-${id}" value="${v.p2n||''}" placeholder="Plan 2" class="adm-mini-input"><input type="number" id="p2p-${id}" value="${v.p2p||''}" placeholder="Price" class="adm-mini-input">
-                        </div><button onclick="saveV('${id}')" class="btn-p py-2.5 text-[10px]">Update Configuration</button></div>`;
-
-                    sSelect.innerHTML += `<option value="${id}">${v.name}</option>`;
-                    if(v.stock) {
-                        let inv = `<div class="p-3 bg-slate-50 rounded-2xl"><b class="text-[10px] uppercase">${v.name} Stock</b><div class="mt-2 space-y-1">`;
-                        Object.keys(v.stock).forEach(sk => {
-                            inv += `<div class="flex justify-between text-[10px] bg-white p-2 rounded"><span>${v.stock[sk].email}</span><i onclick="delStockItem('${id}','${sk}')" class="fa-solid fa-times text-rose-400"></i></div>`;
-                        });
-                        sInv.innerHTML += inv + `</div></div>`;
-                    }
-                });
+            const uBox = document.getElementById('vpn-list');
+            uBox.innerHTML = '';
+            Object.keys(data.vpns || {}).forEach(id => {
+                const v = data.vpns[id], isOff = v.status === "OFF", logo = getVpnLogo(v.name);
+                uBox.innerHTML += `<div onclick="${!isOff ? `openPlans('${id}')` : ''}" class="card flex justify-between items-center bg-white ${isOff ? 'disabled-card' : ''}">
+                <div class="flex items-center gap-4"><img src="${logo}" class="vpn-img"><b>${v.name}</b></div>
+                <span class="text-[9px] font-black px-3 py-1.5 rounded-lg ${!isOff ? 'bg-emerald-50 text-emerald-500' : 'bg-rose-50 text-rose-500'}">
+                ${isOff ? 'OFFLINE' : 'ONLINE'}
+                </span></div>`;
             });
+        }
 
-            onValue(ref(db, 'orders'), (s) => {
-                const aP = document.getElementById('adm-pending'), uBox = document.getElementById('user-orders');
-                aP.innerHTML = ''; uBox.innerHTML = ''; let pCount = 0;
-                const d = s.val(); if(d) Object.keys(d).forEach(id => {
-                    const o = d[id];
-                    // "AwaitingPayment" orders are not yet paid - don't show to admin yet
-                    if(o.st === "Pending") {
-                        pCount++;
-                        aP.innerHTML += `<div class="card space-y-3">
-                            <div class="flex justify-between"><b>${o.user}</b> <span class="text-[10px] font-bold text-indigo-600">${o.method||''}: ${o.trx||''}</span></div>
-                            <p class="text-[10px]">${o.vpn} (${o.plan}) - ${o.date || o.confirmedDate || ''}</p>
-                            <div class="flex gap-2">
-                                <button onclick="showStockList('${id}','${o.vpn_id}')" class="btn-p py-3 text-[10px]">Deliver</button>
-                                <button onclick="rejectOrder('${id}')" class="btn-reject">Reject</button>
-                            </div>
-                        </div>`;
-                    }
-                    if(o.uid == UID && o.st !== "AwaitingPayment") {
-                        let stColor = o.st === "Approved" ? "bg-emerald-50 text-emerald-600" : (o.st === "Rejected" ? "bg-rose-50 text-rose-600" : "bg-indigo-50 text-indigo-600");
-                        uBox.innerHTML += `<div class="card space-y-2">
-                            <div class="flex justify-between items-start">
-                                <div><b class="text-sm">${o.vpn}</b><p class="text-[9px] text-slate-400 mt-1">${o.date || o.confirmedDate || ''}</p></div>
-                                <span class="text-[10px] font-bold px-2 py-1 rounded ${stColor}">${o.st}</span>
-                            </div>
-                            ${o.email ? `
-                            <div class="mt-3 space-y-2">
-                                <div class="acc-box" onclick="copyText('${o.email}')">
-                                    <div class="flex flex-col"><span class="acc-label">Email / ID</span><span class="acc-value">${o.email}</span></div>
-                                    <i class="fa-regular fa-copy text-indigo-400 text-xs"></i>
-                                </div>
-                                <div class="acc-box" onclick="copyText('${o.pass}')">
-                                    <div class="flex flex-col"><span class="acc-label">Password</span><span class="acc-value">${o.pass}</span></div>
-                                    <i class="fa-regular fa-copy text-indigo-400 text-xs"></i>
-                                </div>
-                            </div>
-                            ` : ''}
-                            ${o.st === "Rejected" ? `<p class="text-[9px] text-rose-500 font-bold italic mt-2">Order was rejected by admin.</p>` : ''}
-                        </div>`;
-                    }
-                });
-                document.getElementById('p-count').innerText = pCount;
-                document.getElementById('p-count-badge').className = pCount > 0 ? 'bg-rose-500 text-white text-[10px] font-black px-2 py-1 rounded-full' : 'hidden';
-            });
+        // ================= USER ORDERS =================
+        async function loadMyOrders() {
+            try {
+                const orders = await api('/api/me/orders');
+                renderMyOrders(orders);
+            } catch (e) { /* not opened via Telegram yet, or a transient network hiccup - retry on next poll */ }
+        }
 
-            onValue(ref(db, 'payments'), (s) => {
-                const uP = document.getElementById('user-pay-options'), pL = document.getElementById('pay-list');
-                uP.innerHTML = ''; pL.innerHTML = '';
-                const d = s.val(); if(d) Object.keys(d).forEach(id => {
-                    uP.innerHTML += `<div onclick="setPay('${d[id].name}','${d[id].num}')" class="p-4 border-2 rounded-2xl text-[10px] font-black text-center uppercase">${d[id].name}</div>`;
-                    pL.innerHTML += `<div class="flex justify-between text-[10px] p-2 bg-slate-50 rounded"><span>${d[id].name} (${d[id].num})</span><i onclick="delPay('${id}')" class="fa-solid fa-times"></i></div>`;
-                });
+        function renderMyOrders(orders) {
+            const uBox = document.getElementById('user-orders');
+            uBox.innerHTML = '';
+            Object.keys(orders || {}).forEach(id => {
+                const o = orders[id];
+                let stColor = o.st === "Approved" ? "bg-emerald-50 text-emerald-600" : (o.st === "Rejected" ? "bg-rose-50 text-rose-600" : "bg-indigo-50 text-indigo-600");
+                uBox.innerHTML += `<div class="card space-y-2">
+                    <div class="flex justify-between items-start">
+                        <div><b class="text-sm">${o.vpn}</b><p class="text-[9px] text-slate-400 mt-1">${o.date || o.confirmedDate || ''}</p></div>
+                        <span class="text-[10px] font-bold px-2 py-1 rounded ${stColor}">${o.st}</span>
+                    </div>
+                    ${o.email ? `
+                    <div class="mt-3 space-y-2">
+                        <div class="acc-box" onclick="copyText('${o.email}')">
+                            <div class="flex flex-col"><span class="acc-label">Email / ID</span><span class="acc-value">${o.email}</span></div>
+                            <i class="fa-regular fa-copy text-indigo-400 text-xs"></i>
+                        </div>
+                        <div class="acc-box" onclick="copyText('${o.pass}')">
+                            <div class="flex flex-col"><span class="acc-label">Password</span><span class="acc-value">${o.pass}</span></div>
+                            <i class="fa-regular fa-copy text-indigo-400 text-xs"></i>
+                        </div>
+                    </div>
+                    ` : ''}
+                    ${o.st === "Rejected" ? `<p class="text-[9px] text-rose-500 font-bold italic mt-2">Order was rejected by admin.</p>` : ''}
+                </div>`;
             });
         }
 
@@ -314,6 +271,116 @@ apiKey: "AIzaSyBAYZOCYDMh0o7O6qiph4SRgFwVmasX7R4",
             document.getElementById(pageId + '-page').classList.remove('hidden');
         };
 
+        // ================= BUY FLOW (gateway auto-pay only) =================
+        let curV, curVid, curOrderId;
+
+        window.openPlans = (id) => {
+            const v = (catalogCache && catalogCache.vpns[id]) || {};
+            curV = v.name; curVid = id;
+            let h = `<div class="flex justify-between items-center mb-6"><div class="flex items-center gap-3"><img src="${getVpnLogo(v.name)}" class="w-10 h-10 rounded-lg"><h3 class="font-black text-xl">${v.name}</h3></div><button onclick="this.closest('.modal').style.display='none'">&times;</button></div>`;
+            if (v.p1n) h += `<div onclick="selectPlan('p1')" class="card bg-indigo-50 mb-3 p-5 flex justify-between items-center"><span>${v.p1n}</span><b class="text-indigo-600">৳${v.p1p}</b></div>`;
+            if (v.p2n) h += `<div onclick="selectPlan('p2')" class="card bg-indigo-50 mb-3 p-5 flex justify-between items-center"><span>${v.p2n}</span><b class="text-indigo-600">৳${v.p2p}</b></div>`;
+            document.getElementById('plan-content').innerHTML = h;
+            document.getElementById('plan-modal').style.display = 'flex';
+        };
+
+        // Plan chosen -> ask the SERVER to create the order. Only a plan KEY
+        // ("p1"/"p2") is sent; the server looks up the real name+price itself,
+        // so nothing typed into this page's JS can change what gets charged.
+        // Then it hands straight off to the bot, which creates the nstopup
+        // gateway payment link and verifies it once paid - that's the only
+        // payment path now.
+        window.selectPlan = async (planKey) => {
+            document.getElementById('plan-modal').style.display = 'none';
+            try {
+                const order = await api('/api/order', { method: 'POST', body: JSON.stringify({ vpn_id: curVid, plan: planKey }) });
+                curOrderId = order.order_id;
+                const url = `https://t.me/${BOT_USERNAME}?start=pay_${curOrderId}`;
+                if (tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, '_blank');
+            } catch (e) {
+                Swal.fire('Error', 'অর্ডার তৈরি করা যায়নি। আবার চেষ্টা করুন।', 'error');
+            }
+        };
+
+        window.copyText = (t) => { navigator.clipboard.writeText(t); Swal.fire({ title: 'Copied', icon: 'success', toast: true, timer: 1000 }); };
+
+        // ================= ADMIN PANEL (server checks admin status itself) =================
+        window.openAdmin = () => {
+            document.getElementById('admin-panel').classList.remove('hidden');
+            loadAdminData();
+            adminPollTimer = setInterval(loadAdminData, 5000);
+        };
+        window.closeAdmin = () => {
+            document.getElementById('admin-panel').classList.add('hidden');
+            if (adminPollTimer) clearInterval(adminPollTimer);
+        };
+
+        window.admTab = (t, btn) => {
+            document.querySelectorAll('.adm-tab').forEach(b => b.classList.remove('adm-tab-active'));
+            btn.classList.add('adm-tab-active');
+            document.querySelectorAll('.adm-content').forEach(c => c.classList.add('hidden'));
+            document.getElementById('adm-' + t).classList.remove('hidden');
+        };
+
+        async function loadAdminData() {
+            try {
+                const data = await api('/api/admin/data');
+                adminDataCache = data;
+                renderAdminPending(data.pending);
+                renderAdminVpns(data.vpns);
+                document.getElementById('set-support-url').value = data.supportUrl || '';
+            } catch (e) {
+                console.error('admin load failed', e);
+            }
+        }
+
+        function renderAdminPending(pending) {
+            const aP = document.getElementById('adm-pending');
+            aP.innerHTML = '';
+            let pCount = 0;
+            Object.keys(pending || {}).forEach(id => {
+                const o = pending[id];
+                pCount++;
+                aP.innerHTML += `<div class="card space-y-3">
+                    <div class="flex justify-between"><b>${o.user}</b> <span class="text-[10px] font-bold text-indigo-600">${o.method || ''}: ${o.trx || ''}</span></div>
+                    <p class="text-[10px]">${o.vpn} (${o.plan}) - ${o.date || o.confirmedDate || ''}</p>
+                    <div class="flex gap-2">
+                        <button onclick="showStockList('${id}','${o.vpn_id}')" class="btn-p py-3 text-[10px]">Deliver</button>
+                        <button onclick="rejectOrder('${id}')" class="btn-reject">Reject</button>
+                    </div>
+                </div>`;
+            });
+            document.getElementById('p-count').innerText = pCount;
+            document.getElementById('p-count-badge').className = pCount > 0 ? 'bg-rose-500 text-white text-[10px] font-black px-2 py-1 rounded-full' : 'hidden';
+        }
+
+        function renderAdminVpns(vpns) {
+            const aBox = document.getElementById('adm-vpn-list'),
+                  sSelect = document.getElementById('stock-vpn-id'),
+                  sInv = document.getElementById('stock-inventory-list');
+            aBox.innerHTML = ''; sSelect.innerHTML = ''; sInv.innerHTML = '';
+            Object.keys(vpns || {}).forEach(id => {
+                const v = vpns[id], isOff = v.status === "OFF", logo = getVpnLogo(v.name);
+
+                aBox.innerHTML += `<div class="card space-y-4">
+                    <div class="flex justify-between items-center"><div class="flex items-center gap-2"><img src="${logo}" class="w-8 h-8 rounded-lg"><b>${v.name}</b></div>
+                    <div class="flex items-center gap-3"><label class="switch"><input type="checkbox" ${!isOff ? 'checked' : ''} onchange="toggleV('${id}', this.checked)"><span class="slider"></span></label><i onclick="delV('${id}')" class="fa-solid fa-trash text-rose-300"></i></div></div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="text" id="p1n-${id}" value="${v.p1n || ''}" placeholder="Plan 1" class="adm-mini-input"><input type="number" id="p1p-${id}" value="${v.p1p || ''}" placeholder="Price" class="adm-mini-input">
+                        <input type="text" id="p2n-${id}" value="${v.p2n || ''}" placeholder="Plan 2" class="adm-mini-input"><input type="number" id="p2p-${id}" value="${v.p2p || ''}" placeholder="Price" class="adm-mini-input">
+                    </div><button onclick="saveV('${id}')" class="btn-p py-2.5 text-[10px]">Update Configuration</button></div>`;
+
+                sSelect.innerHTML += `<option value="${id}">${v.name}</option>`;
+                if (v.stock) {
+                    let inv = `<div class="p-3 bg-slate-50 rounded-2xl"><b class="text-[10px] uppercase">${v.name} Stock</b><div class="mt-2 space-y-1">`;
+                    Object.keys(v.stock).forEach(sk => {
+                        inv += `<div class="flex justify-between text-[10px] bg-white p-2 rounded"><span>${v.stock[sk].email}</span><i onclick="delStockItem('${id}','${sk}')" class="fa-solid fa-times text-rose-400"></i></div>`;
+                    });
+                    sInv.innerHTML += inv + `</div></div>`;
+                }
+            });
+        }
+
         window.rejectOrder = (id) => {
             Swal.fire({
                 title: 'Reject Order?',
@@ -322,117 +389,88 @@ apiKey: "AIzaSyBAYZOCYDMh0o7O6qiph4SRgFwVmasX7R4",
                 showCancelButton: true,
                 confirmButtonColor: '#ef4444',
                 confirmButtonText: 'Yes, Reject'
-            }).then((result) => {
+            }).then(async (result) => {
                 if (result.isConfirmed) {
-                    update(ref(db, `orders/${id}`), { st: "Rejected" }).then(() => Swal.fire('Rejected!','','success'));
+                    try {
+                        await api(`/api/admin/orders/${id}/reject`, { method: 'POST' });
+                        Swal.fire('Rejected!', '', 'success');
+                        loadAdminData();
+                    } catch (e) { Swal.fire('Error', '', 'error'); }
                 }
             });
         };
 
-        window.saveV = (id) => update(ref(db,`vpns/${id}`), {
-            p1n: document.getElementById(`p1n-${id}`).value, p1p: document.getElementById(`p1p-${id}`).value,
-            p2n: document.getElementById(`p2n-${id}`).value, p2p: document.getElementById(`p2p-${id}`).value
-        }).then(() => Swal.fire('Updated','','success'));
+        window.saveV = async (id) => {
+            try {
+                await api(`/api/admin/vpns/${id}`, {
+                    method: 'PATCH', body: JSON.stringify({
+                        p1n: document.getElementById(`p1n-${id}`).value, p1p: document.getElementById(`p1p-${id}`).value,
+                        p2n: document.getElementById(`p2n-${id}`).value, p2p: document.getElementById(`p2p-${id}`).value
+                    })
+                });
+                Swal.fire('Updated', '', 'success');
+                loadAdminData(); loadCatalog();
+            } catch (e) { Swal.fire('Error', '', 'error'); }
+        };
 
-        window.addStock = () => {
+        window.addStock = async () => {
             const e = document.getElementById('stock-email').value, p = document.getElementById('stock-pass').value, vid = document.getElementById('stock-vpn-id').value;
-            if(e && p) push(ref(db, `vpns/${vid}/stock`), { email: e, pass: p }).then(() => {
+            if (!(e && p)) return;
+            try {
+                await api('/api/admin/stock', { method: 'POST', body: JSON.stringify({ vpn_id: vid, email: e, pass: p }) });
                 document.getElementById('stock-email').value = ''; document.getElementById('stock-pass').value = '';
-                Swal.fire({title:'Stock Added', icon:'success', toast:true, timer:1500});
-            });
+                Swal.fire({ title: 'Stock Added', icon: 'success', toast: true, timer: 1500 });
+                loadAdminData();
+            } catch (err) { Swal.fire('Error', '', 'error'); }
         };
 
-        let curV, curPl, curPr, curVid, curMethod, curOrderId;
-
-        window.openPlans = (id) => {
-            get(ref(db,`vpns/${id}`)).then(s => {
-                const v = s.val(); curV = v.name; curVid = id;
-                let h = `<div class="flex justify-between items-center mb-6"><div class="flex items-center gap-3"><img src="${getVpnLogo(v.name)}" class="w-10 h-10 rounded-lg"><h3 class="font-black text-xl">${v.name}</h3></div><button onclick="this.closest('.modal').style.display='none'">&times;</button></div>`;
-                if(v.p1n) h += `<div onclick="selectPlan('${v.p1n}','${v.p1p}')" class="card bg-indigo-50 mb-3 p-5 flex justify-between items-center"><span>${v.p1n}</span><b class="text-indigo-600">৳${v.p1p}</b></div>`;
-                if(v.p2n) h += `<div onclick="selectPlan('${v.p2n}','${v.p2p}')" class="card bg-indigo-50 mb-3 p-5 flex justify-between items-center"><span>${v.p2n}</span><b class="text-indigo-600">৳${v.p2p}</b></div>`;
-                document.getElementById('plan-content').innerHTML = h; document.getElementById('plan-modal').style.display = 'flex';
-            });
-        };
-
-        // Plan chosen -> create the order in Firebase (AwaitingPayment) then show payment choice
-        window.selectPlan = (n, p) => {
-            curPl = n; curPr = p;
-            document.getElementById('plan-modal').style.display = 'none';
-
-            push(ref(db, 'orders'), {
-                vpn: curV, vpn_id: curVid, plan: curPl, price: curPr,
-                uid: UID, uname: UNAME, username: USERNAME, user: UNAME,
-                st: "AwaitingPayment"
-            }).then((r) => {
-                curOrderId = r.key;
-                document.getElementById('choice-summary').innerText = `${curV} - ${curPl} (৳${curPr})`;
-                document.getElementById('choice-modal').style.display = 'flex';
-            });
-        };
-
-        // Hands off to the bot, which creates the nstopup payment link and verifies it
-        window.payAuto = () => {
-            document.getElementById('choice-modal').style.display = 'none';
-            const url = `https://t.me/${BOT_USERNAME}?start=pay_${curOrderId}`;
-            if (tg.openTelegramLink) tg.openTelegramLink(url); else window.open(url, '_blank');
-        };
-
-        window.openManualPay = () => {
-            document.getElementById('choice-modal').style.display = 'none';
-            document.getElementById('pay-modal').style.display = 'flex';
-            document.getElementById('target-price').innerText = "Price: ৳" + curPr;
-        };
-
-        window.setPay = (n, m) => { curMethod = n; document.getElementById('active-num').innerText = m; document.getElementById('pay-details').classList.remove('hidden'); };
-
-        window.orderNow = () => {
-            const trx = document.getElementById('trx-id').value; if(!trx) return;
-            const now = new Date();
-            const dateStr = now.toLocaleDateString('en-GB') + ' ' + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            update(ref(db, `orders/${curOrderId}`), { trx: trx.toUpperCase(), method: curMethod, st: "Pending", date: dateStr }).then(() => {
-                Swal.fire('Order Sent','','success'); document.getElementById('pay-modal').style.display = 'none';
-                document.getElementById('trx-id').value = '';
-            });
-        };
-
-        window.showStockList = async (orderId, vpnId) => {
-            const snap = await get(ref(db, `vpns/${vpnId}/stock`));
+        window.showStockList = (orderId, vpnId) => {
+            const vpn = (adminDataCache && adminDataCache.vpns[vpnId]) || {};
+            const stock = vpn.stock || {};
             const content = document.getElementById('stock-select-content');
             let h = `<div class="mb-4 font-bold flex justify-between">Select Account <button onclick="this.closest('.modal').style.display='none'">&times;</button></div>`;
-            if(snap.exists()) {
-                Object.keys(snap.val()).forEach(sk => {
-                    h += `<button class="w-full text-left p-4 bg-slate-50 mb-2 rounded-xl font-bold text-xs" onclick="approveSelected('${orderId}','${vpnId}','${sk}')">${snap.val()[sk].email}</button>`;
+            const keys = Object.keys(stock);
+            if (keys.length) {
+                keys.forEach(sk => {
+                    h += `<button class="w-full text-left p-4 bg-slate-50 mb-2 rounded-xl font-bold text-xs" onclick="approveSelected('${orderId}','${vpnId}','${sk}')">${stock[sk].email}</button>`;
                 });
             } else h += `<p class="text-rose-500">Stock empty!</p>`;
-            content.innerHTML = h; document.getElementById('stock-select-modal').style.display = 'flex';
+            content.innerHTML = h;
+            document.getElementById('stock-select-modal').style.display = 'flex';
         };
 
         window.approveSelected = async (orderId, vpnId, stockKey) => {
-            const snap = await get(ref(db, `vpns/${vpnId}/stock/${stockKey}`));
-            update(ref(db, `orders/${orderId}`), { st: "Approved", email: snap.val().email, pass: snap.val().pass }).then(() => {
-                remove(ref(db, `vpns/${vpnId}/stock/${stockKey}`));
+            try {
+                await api(`/api/admin/orders/${orderId}/deliver`, { method: 'POST', body: JSON.stringify({ stock_key: stockKey }) });
                 document.getElementById('stock-select-modal').style.display = 'none';
-                Swal.fire('Delivered!','','success');
-            });
+                Swal.fire('Delivered!', '', 'success');
+                loadAdminData();
+            } catch (e) { Swal.fire('Error', 'ডেলিভারি ব্যর্থ হয়েছে।', 'error'); }
         };
 
-        window.toggleV = (id, val) => update(ref(db, `vpns/${id}`), { status: val ? "ON" : "OFF" });
-        window.saveSupport = () => set(ref(db, 'supportUrl'), document.getElementById('set-support-url').value);
-        window.addPay = () => { const n = document.getElementById('pay-name').value, m = document.getElementById('pay-num-in').value; if(n&&m) push(ref(db,'payments'),{name:n,num:m}); };
-        window.delPay = (id) => remove(ref(db,`payments/${id}`));
-        window.addVpn = () => { const n = document.getElementById('v-name').value; if(n) push(ref(db,'vpns'),{name:n, status: "ON"}); document.getElementById('v-name').value=''; };
-        window.delV = (id) => remove(ref(db,`vpns/${id}`));
-        window.delStockItem = (vid, skey) => remove(ref(db, `vpns/${vid}/stock/${skey}`));
-
-        window.admTab = (t, btn) => {
-            document.querySelectorAll('.adm-tab').forEach(b => b.classList.remove('adm-tab-active'));
-            btn.classList.add('adm-tab-active');
-            document.querySelectorAll('.adm-content').forEach(c => c.classList.add('hidden'));
-            document.getElementById('adm-'+t).classList.remove('hidden');
+        window.toggleV = async (id, val) => {
+            try { await api(`/api/admin/vpns/${id}`, { method: 'PATCH', body: JSON.stringify({ status: val ? "ON" : "OFF" }) }); loadAdminData(); loadCatalog(); }
+            catch (e) { Swal.fire('Error', '', 'error'); }
         };
-        window.openAdmin = () => document.getElementById('admin-panel').classList.remove('hidden');
-        window.closeAdmin = () => document.getElementById('admin-panel').classList.add('hidden');
-        window.copyText = (t) => { navigator.clipboard.writeText(t); Swal.fire({title:'Copied', icon:'success', toast:true, timer:1000}); };
+
+        window.saveSupport = async () => {
+            try {
+                await api('/api/admin/support-url', { method: 'POST', body: JSON.stringify({ url: document.getElementById('set-support-url').value }) });
+                Swal.fire({ title: 'Saved', icon: 'success', toast: true, timer: 1200 });
+            } catch (e) { Swal.fire('Error', '', 'error'); }
+        };
+
+        window.addVpn = async () => {
+            const n = document.getElementById('v-name').value; if (!n) return;
+            try {
+                await api('/api/admin/vpns', { method: 'POST', body: JSON.stringify({ name: n }) });
+                document.getElementById('v-name').value = '';
+                loadAdminData(); loadCatalog();
+            } catch (e) { Swal.fire('Error', '', 'error'); }
+        };
+
+        window.delV = async (id) => { try { await api(`/api/admin/vpns/${id}`, { method: 'DELETE' }); loadAdminData(); loadCatalog(); } catch (e) {} };
+        window.delStockItem = async (vid, skey) => { try { await api(`/api/admin/stock/${vid}/${skey}`, { method: 'DELETE' }); loadAdminData(); } catch (e) {} };
     </script>
 </body>
 </html>
